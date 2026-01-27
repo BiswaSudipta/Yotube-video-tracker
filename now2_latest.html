@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Course Tracker Ultimate v3.2</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- SortableJS for Drag and Drop -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        /* Loader Animation */
+        .loader {
+            border: 3px solid #1e293b;
+            border-radius: 50%;
+            border-top: 3px solid #14b8a6;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Hide logic */
+        .hidden { display: none !important; }
+
+        /* Drag & Drop Styles */
+        .sortable-ghost { opacity: 0.4; background: #1e293b; }
+        .sortable-drag { background: #1e293b; opacity: 1; box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1); cursor: grabbing; }
+        .cursor-grab { cursor: grab; }
+        .cursor-grabbing { cursor: grabbing; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex overflow-hidden selection:bg-teal-500/30">
+
+    <!-- SIDEBAR (Playlist Tabs) -->
+    <aside class="w-16 md:w-64 flex-none bg-slate-900 border-r border-slate-800 flex flex-col transition-all duration-300">
+        <div class="p-4 border-b border-slate-800 flex items-center gap-3">
+            <div class="bg-gradient-to-br from-teal-500 to-emerald-600 p-2 rounded-lg shrink-0">
+                <i data-lucide="play" class="w-5 h-5 text-white fill-current"></i>
+            </div>
+            <h1 class="hidden md:block font-bold text-lg tracking-tight">Track<span class="text-teal-400">Master</span></h1>
+        </div>
+
+        <!-- Playlist List -->
+        <div id="playlist-tabs" class="flex-1 overflow-y-auto p-2 space-y-1">
+            <!-- Tabs injected here by JS -->
+        </div>
+
+        <div class="p-3 border-t border-slate-800">
+            <button onclick="openAddModal()" class="w-full flex items-center gap-2 bg-teal-600 hover:bg-teal-500 text-white p-2 md:px-4 md:py-3 rounded-lg transition-all justify-center md:justify-start">
+                <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                <span class="hidden md:inline font-medium text-sm">Add Playlist</span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 flex flex-col relative min-w-0">
+        
+        <!-- HEADER -->
+        <header id="main-header" class="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md flex items-center justify-between px-6 shrink-0 hidden">
+            <div class="min-w-0">
+                <h2 id="header-title" class="font-bold text-lg truncate">Playlist Title</h2>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                    <span id="header-count">0/0 Videos</span>
+                    <span>•</span>
+                    <span id="header-time">0m left</span>
+                </div>
+            </div>
+            
+            <!-- Header Actions & Progress -->
+            <div class="flex items-center gap-4">
+                
+                <!-- Add Video Button (Visible on both Mobile and Desktop) -->
+                <button onclick="openAddVideoModal()" class="flex items-center gap-2 text-sm font-bold text-white bg-teal-600 hover:bg-teal-500 px-3 py-1.5 rounded-lg transition-colors shadow-lg shadow-teal-900/20" title="Add Video to Playlist">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span class="hidden md:inline">Add Video</span>
+                </button>
+
+                <!-- Progress Pill -->
+                <div class="flex items-center gap-4 bg-slate-900 border border-slate-800 rounded-full px-4 py-1.5">
+                    <div class="flex flex-col items-end">
+                        <span class="text-[10px] text-slate-500 uppercase font-bold">Progress</span>
+                        <span id="header-percent" class="text-teal-400 font-bold font-mono">0%</span>
+                    </div>
+                    <div id="header-bar-container" class="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div id="header-bar" class="h-full bg-teal-500 w-0 transition-all duration-500"></div>
+                    </div>
+                    <button onclick="deleteCurrentPlaylist()" class="text-red-400 hover:text-red-300 p-1 rounded-full hover:bg-red-900/20" title="Delete Playlist">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT CONTAINER -->
+        <div id="content-area" class="flex-1 flex overflow-hidden">
+            <!-- Empty State -->
+            <div id="empty-state" class="m-auto text-center p-8 max-w-md">
+                <div class="w-20 h-20 bg-slate-900 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-slate-800">
+                    <i data-lucide="layout-list" class="w-10 h-10 text-slate-600"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white mb-2">No Playlist Selected</h2>
+                <p class="text-slate-400 mb-6">Select a playlist from the sidebar or create a new custom one.</p>
+                <button onclick="openAddModal()" class="text-teal-400 hover:underline">Create your first playlist</button>
+            </div>
+
+            <!-- Video List -->
+            <div id="video-list-container" class="w-full lg:w-1/2 overflow-y-auto p-4 md:p-6 space-y-3 custom-scrollbar hidden">
+                <!-- Video items injected by JS -->
+            </div>
+
+            <!-- Active Video / Notes (Right Panel) -->
+            <div id="active-panel" class="hidden lg:flex flex-col w-1/2 border-l border-slate-800 bg-slate-950">
+                <div id="video-embed-container" class="aspect-video bg-black w-full border-b border-slate-800 relative group">
+                    <!-- YouTube Player injected here -->
+                    <div id="youtube-player"></div>
+                </div>
+                
+                <div class="flex-1 flex flex-col p-6 overflow-hidden">
+                    <div class="flex items-start justify-between mb-6">
+                        <div>
+                            <h3 id="active-title" class="font-bold text-lg leading-tight mb-1">Select a video</h3>
+                            <p id="active-channel" class="text-slate-500 text-sm">No video selected</p>
+                        </div>
+                        <button id="active-toggle-btn" class="hidden flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-slate-800 text-slate-300 hover:bg-slate-700">
+                            <i data-lucide="circle" class="w-4 h-4"></i>
+                            <span>Mark Done</span>
+                        </button>
+                    </div>
+
+                    <div class="flex-1 bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-sm font-semibold flex items-center gap-2 text-slate-300">
+                                <i data-lucide="book-open" class="w-4 h-4 text-teal-500"></i>
+                                Notes
+                            </span>
+                            <span class="text-xs text-slate-500">Auto-saved</span>
+                        </div>
+                        <textarea id="active-notes" class="flex-1 w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-300 text-sm resize-none focus:ring-1 focus:ring-teal-500 outline-none" placeholder="Select a video to start taking notes..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ADD PLAYLIST MODAL -->
+    <div id="add-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 class="text-xl font-bold mb-4">Add New Playlist</h2>
+            
+            <!-- Tabs -->
+            <div class="flex gap-2 mb-4 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                <button onclick="switchAddMode('import')" id="tab-import" class="flex-1 py-1.5 rounded text-sm font-medium bg-slate-800 text-white transition-all">Import YouTube</button>
+                <button onclick="switchAddMode('custom')" id="tab-custom" class="flex-1 py-1.5 rounded text-sm font-medium text-slate-400 hover:text-slate-200 transition-all">Create Custom</button>
+            </div>
+
+            <div class="space-y-4">
+                <!-- Import View -->
+                <div id="view-import">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Playlist URL or ID</label>
+                    <input type="text" id="input-playlist-id" placeholder="https://youtube.com/playlist?list=..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 outline-none text-white">
+                </div>
+
+                <!-- Custom View -->
+                <div id="view-custom" class="hidden">
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">Playlist Name</label>
+                    <input type="text" id="input-custom-name" placeholder="My Awesome Course" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 outline-none text-white">
+                </div>
+                
+                <div id="error-msg" class="hidden text-red-400 text-sm flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                    <span id="error-text">Error message</span>
+                </div>
+
+                <div id="fetch-status" class="hidden text-slate-400 text-xs italic">
+                    Fetching large playlists may take a moment...
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button onclick="closeAddModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-lg font-medium transition-colors">Cancel</button>
+                    <button onclick="handlePlaylistSubmit()" id="btn-import" class="flex-1 bg-teal-600 hover:bg-teal-500 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                        <span>Create</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ADD VIDEO MODAL -->
+    <div id="add-video-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h2 class="text-xl font-bold mb-4">Add Video to Playlist</h2>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase font-bold text-slate-500 mb-1">YouTube Video URL</label>
+                    <input type="text" id="input-video-url" placeholder="https://youtube.com/watch?v=..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500 outline-none text-white">
+                    <p class="text-xs text-slate-500 mt-2">Supports standard, shortened (youtu.be), and mobile links.</p>
+                </div>
+                
+                <div id="video-error-msg" class="hidden text-red-400 text-sm flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                    <span id="video-error-text">Error message</span>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button onclick="closeAddVideoModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-lg font-medium transition-colors">Cancel</button>
+                    <button onclick="fetchAndAddSingleVideo()" id="btn-add-video" class="flex-1 bg-teal-600 hover:bg-teal-500 text-white py-2.5 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                        <span>Add Video</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // ==========================================
+        // CONFIGURATION
+        // ==========================================
+        
+        // PASTE YOUR KEY BELOW INSIDE THE QUOTES
+        const YOUTUBE_API_KEY="AIzaSyB_YNJfKps9h3YeQiFzGGtLLavA9BPfS14"; 
+
+        // ==========================================
+        // STATE MANAGEMENT
+        // ==========================================
+        let playlists = JSON.parse(localStorage.getItem('tm_playlists')) || [];
+        let activePlaylistId = localStorage.getItem('tm_active_id') || null;
+        let activeVideoId = null;
+        let player = null; // YouTube Player instance
+        let progressInterval = null; // Interval for checking video progress
+        let sortableInstance = null; // Drag and drop instance
+        let addMode = 'import'; // 'import' or 'custom'
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        
+        // Load YouTube IFrame API
+        const tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        const firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        window.onload = () => {
+            lucide.createIcons();
+            renderTabs();
+            if (activePlaylistId && playlists.find(p => p.id === activePlaylistId)) {
+                loadPlaylistView(activePlaylistId);
+            } else {
+                showEmptyState();
+            }
+        };
+
+        function saveData() {
+            localStorage.setItem('tm_playlists', JSON.stringify(playlists));
+            localStorage.setItem('tm_active_id', activePlaylistId);
+        }
+
+        // ==========================================
+        // UI RENDERING
+        // ==========================================
+        function renderTabs() {
+            const container = document.getElementById('playlist-tabs');
+            container.innerHTML = '';
+
+            playlists.forEach(pl => {
+                const isActive = pl.id === activePlaylistId;
+                const stats = calculateStats(pl);
+                
+                const btn = document.createElement('button');
+                btn.className = `w-full flex items-center gap-3 px-4 py-3 border-l-2 transition-all group ${
+                    isActive 
+                    ? 'bg-slate-800 border-teal-500 text-white' 
+                    : 'border-transparent text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                }`;
+                btn.onclick = () => loadPlaylistView(pl.id);
+                
+                // Fallback icon if no thumbnail
+                const thumbHtml = pl.thumbnail 
+                    ? `<img src="${pl.thumbnail}" class="w-10 h-10 rounded object-cover bg-slate-950">` 
+                    : `<div class="w-10 h-10 rounded bg-slate-800 flex items-center justify-center"><i data-lucide="list-music" class="w-5 h-5 text-slate-500"></i></div>`;
+
+                btn.innerHTML = `
+                    <div class="relative shrink-0">
+                        ${thumbHtml}
+                        ${isActive ? '<div class="absolute -right-1 -bottom-1 w-3 h-3 bg-teal-500 rounded-full border-2 border-slate-800"></div>' : ''}
+                    </div>
+                    <div class="text-left hidden md:block min-w-0 overflow-hidden">
+                        <div class="font-medium text-sm truncate w-32">${pl.title}</div>
+                        <div class="text-xs ${isActive ? 'text-teal-400' : 'text-slate-600'}">${stats.percent}% completed</div>
+                    </div>
+                `;
+                container.appendChild(btn);
+            });
+            lucide.createIcons();
+        }
+
+        function loadPlaylistView(id) {
+            const playlist = playlists.find(p => p.id === id);
+            if (!playlist) return;
+
+            activePlaylistId = id;
+            saveData();
+            renderTabs(); // update active state in sidebar
+
+            // Show UI Elements
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('main-header').classList.remove('hidden');
+            document.getElementById('video-list-container').classList.remove('hidden');
+
+            // Render Header Stats
+            updateHeaderStats(playlist);
+
+            // Render Video List
+            const listContainer = document.getElementById('video-list-container');
+            listContainer.innerHTML = '';
+
+            const totalDuration = playlist.videos.reduce((acc, v) => acc + v.duration, 0);
+
+            if(playlist.videos.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center p-8 text-slate-500">
+                        <p class="mb-2">This playlist is empty.</p>
+                        <button onclick="openAddVideoModal()" class="text-teal-400 hover:underline flex items-center gap-2 justify-center mx-auto">
+                            <i data-lucide="plus-circle" class="w-4 h-4"></i> Add your first video
+                        </button>
+                    </div>
+                `;
+            } else {
+                playlist.videos.forEach((video, index) => {
+                    const isWatched = playlist.checked[video.id];
+                    const isActive = activeVideoId === video.id;
+                    const percentOfTotal = totalDuration ? ((video.duration / totalDuration) * 100).toFixed(1) : 0;
+                    const hasNotes = playlist.notes && playlist.notes[video.id] && playlist.notes[video.id].trim().length > 0;
+                    
+                    // Video Progress
+                    const vidProgress = (playlist.videoProgress && playlist.videoProgress[video.id]) || 0;
+
+                    const div = document.createElement('div');
+                    div.className = `group relative flex items-center gap-3 p-3 rounded-xl border transition-all hover:border-slate-700 ${
+                        isActive 
+                        ? 'bg-slate-800 border-teal-500/30 shadow-lg shadow-teal-900/10 z-10' 
+                        : 'bg-slate-900 border-slate-800'
+                    } ${isWatched ? 'opacity-75' : ''}`;
+                    
+                    div.onclick = (e) => {
+                        if(e.target.closest('button')) return;
+                        selectVideo(video.id);
+                    };
+
+                    div.setAttribute('data-id', video.id);
+
+                    div.innerHTML = `
+                        <div class="cursor-grab text-slate-600 hover:text-slate-400 p-1 handle">
+                            <i data-lucide="grip-vertical" class="w-4 h-4"></i>
+                        </div>
+
+                        <button onclick="toggleVideo(event, '${video.id}')" class="shrink-0 p-1 rounded-full hover:bg-slate-700 z-20">
+                            <i data-lucide="${isWatched ? 'check-circle' : 'circle'}" class="w-6 h-6 ${isWatched ? 'text-teal-400 fill-teal-400/10' : 'text-slate-600 group-hover:text-slate-400'}"></i>
+                        </button>
+                        
+                        <div class="flex-1 min-w-0 flex flex-col gap-1">
+                            <div class="text-sm font-medium truncate ${isWatched ? 'text-slate-500 line-through' : 'text-slate-200'}">
+                                ${index + 1}. ${video.title}
+                            </div>
+                            <div class="flex items-center gap-3 text-[10px] text-slate-500">
+                                <span class="bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800 font-mono">${formatTime(video.duration)}</span>
+                                <span>${percentOfTotal}% of course</span>
+                                ${hasNotes ? '<span class="text-indigo-400 flex items-center gap-0.5"><i data-lucide="book" class="w-3 h-3"></i> Notes</span>' : ''}
+                            </div>
+                            
+                            <!-- Per-Video Progress Bar -->
+                            <div class="w-full h-1 bg-slate-950 rounded-full mt-1 overflow-hidden">
+                                <div class="h-full bg-teal-600/50 transition-all duration-300" style="width: ${vidProgress}%"></div>
+                            </div>
+                        </div>
+
+                        <button onclick="deleteVideo(event, '${video.id}')" class="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-slate-600 hover:text-red-400 hover:bg-slate-950 rounded-lg" title="Remove Video">
+                            <i data-lucide="trash" class="w-4 h-4"></i>
+                        </button>
+                    `;
+                    listContainer.appendChild(div);
+                });
+            }
+            lucide.createIcons();
+
+            // Initialize Sortable
+            if (sortableInstance) sortableInstance.destroy();
+            sortableInstance = new Sortable(listContainer, {
+                animation: 150,
+                handle: '.handle', 
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                onEnd: function (evt) {
+                    reorderPlaylist(evt.oldIndex, evt.newIndex);
+                }
+            });
+        }
+
+        // ==========================================
+        // PLAYER & TRACKING LOGIC
+        // ==========================================
+
+        function onYouTubeIframeAPIReady() {
+            // API Ready
+        }
+
+        function initPlayer(videoId) {
+            if (player) {
+                player.loadVideoById(videoId);
+            } else {
+                player = new YT.Player('youtube-player', {
+                    height: '100%',
+                    width: '100%',
+                    videoId: videoId,
+                    playerVars: { 'playsinline': 1, 'autoplay': 1, 'rel': 0 },
+                    events: { 'onStateChange': onPlayerStateChange }
+                });
+            }
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.PLAYING) {
+                startTracking();
+            } else {
+                stopTracking();
+            }
+        }
+
+        function startTracking() {
+            stopTracking();
+            progressInterval = setInterval(() => {
+                if (player && player.getCurrentTime) {
+                    const currentTime = player.getCurrentTime();
+                    const duration = player.getDuration();
+                    if(duration > 0) {
+                        const percent = (currentTime / duration) * 100;
+                        updateVideoProgress(activeVideoId, percent);
+                    }
+                }
+            }, 1000); 
+        }
+
+        function stopTracking() {
+            if (progressInterval) clearInterval(progressInterval);
+        }
+
+        function updateVideoProgress(vidId, percent) {
+            const playlist = playlists.find(p => p.id === activePlaylistId);
+            if(!playlist) return;
+
+            if(!playlist.videoProgress) playlist.videoProgress = {};
+            const current = playlist.videoProgress[vidId] || 0;
+            if(percent > current) {
+                playlist.videoProgress[vidId] = Math.min(percent, 100);
+                saveData();
+                const item = document.querySelector(`[data-id="${vidId}"]`);
+                if(item) {
+                    const bar = item.querySelector('.bg-teal-600\\/50'); 
+                    if(bar) bar.style.width = `${percent}%`;
+                }
+            }
+        }
+
+        function selectVideo(vidId) {
+            activeVideoId = vidId;
+            const playlist = playlists.find(p => p.id === activePlaylistId);
+            const video = playlist.videos.find(v => v.id === vidId);
+
+            loadPlaylistView(activePlaylistId); 
+
+            const panel = document.getElementById('active-panel');
+            panel.classList.remove('hidden');
+
+            initPlayer(vidId);
+
+            document.getElementById('active-title').innerText = video.title;
+            document.getElementById('active-channel').innerText = video.channel;
+
+            const btn = document.getElementById('active-toggle-btn');
+            btn.classList.remove('hidden');
+            const isWatched = playlist.checked[vidId];
+            updateToggleButton(isWatched);
+            btn.onclick = (e) => toggleVideo(e, vidId);
+
+            const notesArea = document.getElementById('active-notes');
+            notesArea.value = (playlist.notes && playlist.notes[vidId]) || '';
+            notesArea.oninput = (e) => {
+                if(!playlist.notes) playlist.notes = {};
+                playlist.notes[vidId] = e.target.value;
+                saveData();
+            };
+        }
+
+        function updateToggleButton(isWatched) {
+            const btn = document.getElementById('active-toggle-btn');
+            btn.innerHTML = isWatched 
+                ? `<i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i><span class="text-emerald-400">Completed</span>`
+                : `<i data-lucide="circle" class="w-4 h-4"></i><span>Mark Done</span>`;
+            lucide.createIcons();
+        }
+
+        function toggleVideo(e, vidId) {
+            e.stopPropagation(); 
+            const playlist = playlists.find(p => p.id === activePlaylistId);
+            if (!playlist) return;
+            if (!playlist.checked) playlist.checked = {};
+            playlist.checked[vidId] = !playlist.checked[vidId];
+            saveData();
+            loadPlaylistView(activePlaylistId);
+            if(activeVideoId === vidId) {
+                updateToggleButton(playlist.checked[vidId]);
+            }
+        }
+
+        // ==========================================
+        // DATA MANIPULATION
+        // ==========================================
+
+        function reorderPlaylist(oldIndex, newIndex) {
+            const playlist = playlists.find(p => p.id === activePlaylistId);
+            if (!playlist) return;
+            const movedItem = playlist.videos.splice(oldIndex, 1)[0];
+            playlist.videos.splice(newIndex, 0, movedItem);
+            saveData();
+            loadPlaylistView(activePlaylistId);
+        }
+
+        function deleteVideo(e, vidId) {
+            e.stopPropagation();
+            if(!confirm("Remove this video from the playlist?")) return;
+
+            const playlist = playlists.find(p => p.id === activePlaylistId);
+            if (!playlist) return;
+
+            playlist.videos = playlist.videos.filter(v => v.id !== vidId);
+            
+            if(playlist.checked) delete playlist.checked[vidId];
+            if(playlist.notes) delete playlist.notes[vidId];
+            if(playlist.videoProgress) delete playlist.videoProgress[vidId];
+
+            saveData();
+            loadPlaylistView(activePlaylistId);
+
+            if (activeVideoId === vidId) {
+                activeVideoId = null;
+                if(player) player.stopVideo();
+                document.getElementById('active-panel').classList.add('hidden');
+            }
+        }
+
+        function calculateStats(playlist) {
+            let totalDuration = 0;
+            let watchedDuration = 0;
+            let watchedCount = 0;
+
+            playlist.videos.forEach(v => {
+                totalDuration += v.duration;
+                if (playlist.checked && playlist.checked[v.id]) {
+                    watchedDuration += v.duration;
+                    watchedCount++;
+                }
+            });
+
+            return {
+                totalCount: playlist.videos.length,
+                watchedCount,
+                percent: totalDuration ? Math.round((watchedDuration / totalDuration) * 100) : 0,
+                timeLeft: totalDuration - watchedDuration
+            };
+        }
+
+        function updateHeaderStats(playlist) {
+            const stats = calculateStats(playlist);
+            document.getElementById('header-title').innerText = playlist.title;
+            document.getElementById('header-count').innerText = `${stats.watchedCount}/${stats.totalCount} Videos`;
+            document.getElementById('header-time').innerText = `${formatTime(stats.timeLeft)} left`;
+            document.getElementById('header-percent').innerText = `${stats.percent}%`;
+            document.getElementById('header-bar').style.width = `${stats.percent}%`;
+        }
+
+        function deleteCurrentPlaylist() {
+            if(confirm("Are you sure you want to remove this playlist? Notes will be lost.")) {
+                playlists = playlists.filter(p => p.id !== activePlaylistId);
+                activePlaylistId = null;
+                saveData();
+                renderTabs();
+                showEmptyState();
+            }
+        }
+
+        function showEmptyState() {
+            document.getElementById('empty-state').classList.remove('hidden');
+            document.getElementById('main-header').classList.add('hidden');
+            document.getElementById('video-list-container').classList.add('hidden');
+            document.getElementById('active-panel').classList.add('hidden');
+        }
+
+        // ==========================================
+        // CREATION & IMPORT LOGIC
+        // ==========================================
+        
+        function openAddModal() {
+            document.getElementById('add-modal').classList.remove('hidden');
+            switchAddMode('import'); // Reset to default
+        }
+
+        function closeAddModal() {
+            document.getElementById('add-modal').classList.add('hidden');
+            document.getElementById('error-msg').classList.add('hidden');
+            document.getElementById('fetch-status').classList.add('hidden');
+            document.getElementById('input-playlist-id').value = '';
+            document.getElementById('input-custom-name').value = '';
+        }
+
+        function switchAddMode(mode) {
+            addMode = mode;
+            const tabImport = document.getElementById('tab-import');
+            const tabCustom = document.getElementById('tab-custom');
+            const viewImport = document.getElementById('view-import');
+            const viewCustom = document.getElementById('view-custom');
+            const btn = document.getElementById('btn-import');
+
+            if (mode === 'import') {
+                tabImport.classList.replace('text-slate-400', 'bg-slate-800');
+                tabImport.classList.replace('hover:text-slate-200', 'text-white');
+                tabCustom.classList.replace('bg-slate-800', 'text-slate-400');
+                tabCustom.classList.replace('text-white', 'hover:text-slate-200');
+                
+                viewImport.classList.remove('hidden');
+                viewCustom.classList.add('hidden');
+                btn.innerHTML = '<span>Import</span>';
+                setTimeout(() => document.getElementById('input-playlist-id').focus(), 50);
+            } else {
+                tabCustom.classList.replace('text-slate-400', 'bg-slate-800');
+                tabCustom.classList.replace('hover:text-slate-200', 'text-white');
+                tabImport.classList.replace('bg-slate-800', 'text-slate-400');
+                tabImport.classList.replace('text-white', 'hover:text-slate-200');
+
+                viewCustom.classList.remove('hidden');
+                viewImport.classList.add('hidden');
+                btn.innerHTML = '<span>Create</span>';
+                setTimeout(() => document.getElementById('input-custom-name').focus(), 50);
+            }
+        }
+
+        function handlePlaylistSubmit() {
+            if (addMode === 'import') {
+                fetchAndAddPlaylist();
+            } else {
+                createCustomPlaylist();
+            }
+        }
+
+        function createCustomPlaylist() {
+            const name = document.getElementById('input-custom-name').value.trim();
+            if (!name) return;
+
+            const newPlaylist = {
+                id: crypto.randomUUID(),
+                youtubeId: null, // It's custom
+                title: name,
+                thumbnail: null,
+                checked: {},
+                notes: {},
+                videoProgress: {},
+                videos: []
+            };
+
+            playlists.push(newPlaylist);
+            saveData();
+            closeAddModal();
+            loadPlaylistView(newPlaylist.id);
+        }
+
+        // ==========================================
+        // SINGLE VIDEO ADD LOGIC
+        // ==========================================
+        
+        function openAddVideoModal() {
+            if (!activePlaylistId) return;
+            document.getElementById('add-video-modal').classList.remove('hidden');
+            document.getElementById('input-video-url').focus();
+        }
+
+        function closeAddVideoModal() {
+            document.getElementById('add-video-modal').classList.add('hidden');
+            document.getElementById('video-error-msg').classList.add('hidden');
+            document.getElementById('input-video-url').value = '';
+        }
+
+        function extractVideoId(input) {
+            if (!input) return null;
+            input = input.trim();
+            let vidId = null;
+            
+            try {
+                if (input.includes('youtu.be/')) {
+                    vidId = input.split('youtu.be/')[1].split('?')[0];
+                } else if (input.includes('v=')) {
+                    vidId = input.split('v=')[1].split('&')[0];
+                } else if (input.includes('embed/')) {
+                    vidId = input.split('embed/')[1].split('?')[0];
+                } else if(input.length === 11) {
+                    vidId = input; 
+                }
+            } catch(e) {
+                return null;
+            }
+            return vidId;
+        }
+
+        async function fetchAndAddSingleVideo() {
+            const input = document.getElementById('input-video-url').value;
+            const btn = document.getElementById('btn-add-video');
+            const errorDiv = document.getElementById('video-error-msg');
+            const errorText = document.getElementById('video-error-text');
+
+            const vidId = extractVideoId(input);
+
+            if (!vidId) { 
+                errorText.innerText = "Invalid Video ID or URL";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if(!YOUTUBE_API_KEY) {
+                errorText.innerText = "API Key missing";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loader"></div>';
+            errorDiv.classList.add('hidden');
+
+            try {
+                const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${vidId}&key=${YOUTUBE_API_KEY}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (!data.items || data.items.length === 0) throw new Error("Video not found");
+
+                const item = data.items[0];
+                const newVideo = {
+                    id: item.id,
+                    title: item.snippet.title,
+                    channel: item.snippet.channelTitle,
+                    duration: parseDuration(item.contentDetails.duration)
+                };
+
+                const playlist = playlists.find(p => p.id === activePlaylistId);
+                if (playlist) {
+                    playlist.videos.push(newVideo);
+                    
+                    // If this is the first video of a custom playlist, set thumbnail
+                    if (!playlist.thumbnail && !playlist.youtubeId) {
+                        playlist.thumbnail = item.snippet.thumbnails.medium?.url;
+                    }
+                    
+                    saveData();
+                    loadPlaylistView(activePlaylistId);
+                    closeAddVideoModal();
+                }
+
+            } catch (err) {
+                console.error(err);
+                errorText.innerText = "Failed to fetch video";
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Add Video</span>';
+            }
+        }
+
+        // ==========================================
+        // YOUTUBE IMPORT LOGIC
+        // ==========================================
+
+        function chunkArray(array, size) {
+            const result = [];
+            for (let i = 0; i < array.length; i += size) {
+                result.push(array.slice(i, i + size));
+            }
+            return result;
+        }
+
+        async function fetchAndAddPlaylist() {
+            const input = document.getElementById('input-playlist-id').value;
+            const btn = document.getElementById('btn-import');
+            const errorDiv = document.getElementById('error-msg');
+            const errorText = document.getElementById('error-text');
+            const statusDiv = document.getElementById('fetch-status');
+            
+            let listId = input;
+            const match = input.match(/[?&]list=([^#\&\?]+)/);
+            if (match) listId = match[1];
+
+            if (!listId) {
+                errorText.innerText = "Invalid ID";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            if(!YOUTUBE_API_KEY) {
+                errorText.innerText = "API Key is missing in code!";
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<div class="loader"></div>';
+            errorDiv.classList.add('hidden');
+            statusDiv.classList.remove('hidden');
+
+            try {
+                // 1. Metadata
+                const listUrl = `https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${listId}&key=${YOUTUBE_API_KEY}`;
+                const listRes = await fetch(listUrl);
+                const listData = await listRes.json();
+                
+                if(!listData.items || listData.items.length === 0) throw new Error("Playlist not found");
+                const playlistTitle = listData.items[0].snippet.title;
+                const playlistThumb = listData.items[0].snippet.thumbnails.medium?.url;
+
+                // 2. Pagination Loop
+                let allItems = [];
+                let nextPageToken = '';
+                
+                do {
+                    const itemsUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&maxResults=50&playlistId=${listId}&key=${YOUTUBE_API_KEY}&pageToken=${nextPageToken}`;
+                    const itemsRes = await fetch(itemsUrl);
+                    const itemsData = await itemsRes.json();
+                    
+                    if (itemsData.items) {
+                        allItems = [...allItems, ...itemsData.items];
+                    }
+                    nextPageToken = itemsData.nextPageToken || '';
+                } while (nextPageToken);
+
+                // 3. Duration Batching
+                const allVideoIds = allItems.map(i => i.contentDetails.videoId);
+                const idChunks = chunkArray(allVideoIds, 50);
+                const durationMap = {};
+
+                for (const chunk of idChunks) {
+                    const vidUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${chunk.join(',')}&key=${YOUTUBE_API_KEY}`;
+                    const vidRes = await fetch(vidUrl);
+                    const vidData = await vidRes.json();
+                    
+                    if (vidData.items) {
+                        vidData.items.forEach(v => {
+                            durationMap[v.id] = parseDuration(v.contentDetails.duration);
+                        });
+                    }
+                }
+
+                const newPlaylist = {
+                    id: crypto.randomUUID(),
+                    youtubeId: listId,
+                    title: playlistTitle,
+                    thumbnail: playlistThumb,
+                    checked: {},
+                    notes: {},
+                    videoProgress: {},
+                    videos: allItems.map(item => ({
+                        id: item.contentDetails.videoId,
+                        title: item.snippet.title,
+                        channel: item.snippet.videoOwnerChannelTitle || "Unknown Channel",
+                        duration: durationMap[item.contentDetails.videoId] || 0
+                    })).filter(v => v.title !== "Private video" && v.title !== "Deleted video")
+                };
+
+                playlists.push(newPlaylist);
+                saveData();
+                closeAddModal();
+                loadPlaylistView(newPlaylist.id);
+
+            } catch (err) {
+                console.error(err);
+                errorText.innerText = "Failed to fetch. Check API Key or ID.";
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Import</span>';
+                statusDiv.classList.add('hidden');
+            }
+        }
+
+        // ==========================================
+        // UTILS
+        // ==========================================
+        function parseDuration(duration) {
+            if(!duration) return 0;
+            const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+            if (!match) return 0;
+            const hours = (parseInt(match[1]) || 0);
+            const minutes = (parseInt(match[2]) || 0);
+            const seconds = (parseInt(match[3]) || 0);
+            return (hours * 3600) + (minutes * 60) + seconds;
+        }
+
+        function formatTime(seconds) {
+            if (!seconds) return "00:00";
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = seconds % 60;
+            if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        }
+    </script>
+</body>
+</html>
